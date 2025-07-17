@@ -1,0 +1,97 @@
+# Prompt para Desenvolvimento de Sistema de Controle de Produção de Peças Plásticas
+
+## **📌 Visão Geral**  
+Desenvolver uma aplicação web moderna, responsiva e escalável para **controlar a produção de peças plásticas** em máquinas injetoras, com foco em:  
+- Gestão de colaboradores e metas.  
+- Acompanhamento em tempo real da produção.  
+- Controle de tempo de produção (início, pausa, retorno, finalização).  
+- Emissão de relatórios personalizados.  
+
+---
+
+## **🛠 Tecnologias**  
+- **Backend**: Node.js (Express/NestJS)  
+- **Frontend**: React.js (TypeScript) + Tailwind CSS  
+- **Banco de Dados**: PostgreSQL  
+- **Autenticação**: JWT (Login e controle de usuários)  
+- **Padrões**: Clean Code, SOLID, Arquitetura Modular  
+
+---
+
+## **🎯 Requisitos Funcionais**  
+
+### **👥 Módulo de Colaboradores**  
+- Cadastro de colaboradores (nome, matrícula, turno).  
+- Relacionamento com máquinas injetoras (um colaborador pode operar várias máquinas).  
+- Definição de **meta diária/semanal** de produção.  
+- Registro de:  
+  - **Início de produção** (máquina + matriz).  
+  - **Pausas** (justificativa, tempo).  
+  - **Retomada** e **finalização** do turno.  
+- Histórico de produção (tempo útil, quantidade, eficiência vs meta).  
+
+### **⚙️ Módulo de Máquinas Injetoras**  
+- Cadastro de máquinas (ID, nome, capacidade máxima/dia).  
+- Relacionamento com:  
+  - **Matrizes** (quais peças podem ser produzidas).  
+  - **Colaboradores** (quem opera a máquina).  
+- Status de **disponibilidade/ocupação** em tempo real.  
+
+### **🧩 Módulo de Matrizes (Formas de Peça)**  
+- Cadastro de matrizes (código, nome, peça correspondente).  
+- Quantidade de peças por ciclo (opcional).  
+- Toda produção deve estar vinculada a uma matriz.  
+
+### **🔄 Controle de Produção**  
+- Fluxo de produção:  
+  1. **Início**: Colaborador seleciona máquina + matriz.  
+  2. **Pausa**: Registra motivo (manutenção, descanso).  
+  3. **Retorno**: Reinicia contagem de tempo útil.  
+  4. **Finalização**: Gera resumo (tempo útil, peças produzidas, eficiência vs meta).  
+- Cálculos automáticos:  
+  - Tempo total vs tempo útil.  
+  - Quantidade produzida vs meta.  
+
+### **📊 Módulo de Relatórios**  
+- Filtros por:  
+  - Colaborador  
+  - Máquina  
+  - Matriz  
+  - Período (data/hora)  
+- Métricas:  
+  - Tempo de produção real x pausas.  
+  - Eficiência (produção vs meta vs capacidade da máquina).  
+  - Turnos pendentes/incompletos.  
+- Exportação em PDF/Excel.  
+
+---
+
+## **🎨 UI/UX Requisitos**  
+- **Design Responsivo** (mobile + desktop).  
+- **Dashboard em Tempo Real** com:  
+  - Gráficos de produção (máquinas, colaboradores).  
+  - Alertas de metas não atingidas.  
+- **Clean UI** com Tailwind CSS (moderno, escuro/claro).  
+
+---
+
+## **⚡ Requisitos Não-Funcionais**  
+- **Performance**: Suporte a 100+ usuários concorrentes.  
+- **Segurança**: Autenticação JWT + RBAC (controle de acesso).  
+- **Escalabilidade**: Microserviços (opcional para futuras expansões).  
+- **Testes**: Unitários (Jest) + E2E (Cypress).  
+
+---
+
+## **📝 Entregáveis Esperados**  
+1. **Backend**: API RESTful documentada (Swagger/OpenAPI).  
+2. **Frontend**: Aplicação React com estados gerenciados (Redux/Zustand).  
+3. **Banco de Dados**: Modelo ER diagramado + scripts SQL.  
+4. **Deploy**: Docker-compose (local) + guia para AWS/Heroku.  
+
+---
+
+**❗ Observações:**  
+- Priorizar **clean code** e componentes reutilizáveis.  
+- Incluir documentação técnica e do usuário.  
+- Validações robustas (ex: evitar produção sem matriz vinculada).  
