@@ -3,6 +3,7 @@ import {
   LayoutDashboard, 
   Users, 
   Settings, 
+  Package,
   Play, 
   BarChart3,
   Shield
@@ -14,10 +15,9 @@ import { Badge } from "@/components/ui/badge";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Colaboradores", href: "/colaboradores", icon: Users },
   { name: "Máquinas", href: "/maquinas", icon: Settings },
+  { name: "Matrizes", href: "/matrizes", icon: Package },
   { name: "Produção", href: "/producao", icon: Play },
-  { name: "Relatórios", href: "/relatorios", icon: BarChart3 },
   { name: "Usuários", href: "/usuarios", icon: Shield, adminOnly: true },
 ];
 

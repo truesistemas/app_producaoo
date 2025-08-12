@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Package, Clock, CheckCircle, Play } from "lucide-react";
+import { Package, Clock, CheckCircle, RotateCcw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -20,8 +20,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Employee, Machine, Matrix } from "@shared/schema";
-import type { ProductionModalData, MatrixMaterial } from "@/types";
+import type { Matrix } from "@shared/schema";
+import type { ProductionSessionWithDetails, MatrixMaterial } from "@/types";
 
 // Helper function to format cycle time
 const formatCycleTime = (seconds: number): string => {
@@ -38,16 +38,20 @@ const formatCycleTime = (seconds: number): string => {
   }
 };
 
-interface ProductionModalProps {
+interface ResumeProductionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  session: ProductionSessionWithDetails | null;
 }
 
-export default function ProductionModal({ open, onOpenChange }: ProductionModalProps) {
+interface ResumeProductionData {
+  matrixId: number;
+  selectedMaterialId?: number;
+}
+
+export default function ResumeProductionModal({ open, onOpenChange, session }: ResumeProductionModalProps) {
   const { toast } = useToast();
-  const [formData, setFormData] = useState<ProductionModalData>({
-    employeeId: 0,
-    machineId: 0,
+  const [formData, setFormData] = useState<ResumeProductionData>({
     matrixId: 0,
     selectedMaterialId: undefined,
   });
@@ -56,17 +60,19 @@ export default function ProductionModal({ open, onOpenChange }: ProductionModalP
   const [matrixMaterials, setMatrixMaterials] = useState<MatrixMaterial[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
 
-  const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees"],
-  });
-
-  const { data: machines = [] } = useQuery<Machine[]>({
-    queryKey: ["/api/machines"],
-  });
-
   const { data: matrices = [] } = useQuery<Matrix[]>({
     queryKey: ["/api/matrices"],
   });
+
+  // Inicializar dados quando o modal abrir
+  useEffect(() => {
+    if (session && open) {
+      setFormData({
+        matrixId: session.matrix.id,
+        selectedMaterialId: session.selectedMaterialId, // Manter material atual selecionado
+      });
+    }
+  }, [session, open]);
 
   // Buscar materiais quando uma matriz é selecionada
   useEffect(() => {
@@ -100,24 +106,30 @@ export default function ProductionModal({ open, onOpenChange }: ProductionModalP
     loadMatrixMaterials();
   }, [formData.matrixId, toast]);
 
-  const startProductionMutation = useMutation({
-    mutationFn: async (data: ProductionModalData) => {
-      return await apiRequest("POST", "/api/production-sessions", data);
+  const resumeProductionMutation = useMutation({
+    mutationFn: async (data: ResumeProductionData) => {
+      if (!session) throw new Error("Sessão não encontrada");
+      return await apiRequest("PUT", `/api/production-sessions/${session.id}/resume`, data);
     },
     onSuccess: () => {
       toast({
-        title: "Produção Iniciada",
-        description: "Sessão de produção criada com sucesso. O timer está ativo!",
+        title: "Produção Retomada",
+        description: "Sessão de produção retomada com sucesso. O timer está ativo novamente!",
       });
+      // Invalidar múltiplas queries para atualização completa
       queryClient.invalidateQueries({ queryKey: ["/api/production-sessions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      if (session) {
+        queryClient.invalidateQueries({ queryKey: [`/api/production-sessions/${session.id}/pauses`] });
+        queryClient.invalidateQueries({ queryKey: [`/api/production-sessions/${session.id}/metrics`] });
+      }
       onOpenChange(false);
       resetForm();
     },
     onError: () => {
       toast({
         title: "Erro",
-        description: "Erro ao iniciar produção. Tente novamente.",
+        description: "Erro ao retomar produção. Tente novamente.",
         variant: "destructive",
       });
     },
@@ -125,10 +137,8 @@ export default function ProductionModal({ open, onOpenChange }: ProductionModalP
 
   const resetForm = () => {
     setFormData({
-      employeeId: 0,
-      machineId: 0,
-      matrixId: 0,
-      selectedMaterialId: undefined,
+      matrixId: session?.matrix.id || 0,
+      selectedMaterialId: session?.selectedMaterialId, // Manter material atual
     });
     setMatrixMaterials([]);
   };
@@ -136,10 +146,10 @@ export default function ProductionModal({ open, onOpenChange }: ProductionModalP
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (formData.employeeId === 0 || formData.machineId === 0 || formData.matrixId === 0) {
+    if (formData.matrixId === 0) {
       toast({
-        title: "Dados Incompletos",
-        description: "Por favor, preencha todos os campos obrigatórios.",
+        title: "Matriz Obrigatória",
+        description: "Por favor, selecione uma matriz para retomar a produção.",
         variant: "destructive",
       });
       return;
@@ -155,71 +165,56 @@ export default function ProductionModal({ open, onOpenChange }: ProductionModalP
       return;
     }
 
-    startProductionMutation.mutate(formData);
+    resumeProductionMutation.mutate(formData);
   };
 
   const selectedMatrix = matrices.find(m => m.id === formData.matrixId);
   const selectedMaterial = matrixMaterials.find(m => m.rawMaterialId === formData.selectedMaterialId);
+  const isMatrixChanged = session && formData.matrixId !== session.matrix.id;
+
+  if (!session) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Play className="w-5 h-5 text-blue-600" />
-            🚀 Iniciar Produção
+            <RotateCcw className="w-5 h-5 text-green-600" />
+            Retomar Produção
           </DialogTitle>
           <DialogDescription>
-            Configure os dados para iniciar uma nova sessão de produção. O timer será ativado automaticamente.
+            Configure a matriz e material para retomar a produção. Você pode manter a configuração atual ou fazer alterações.
           </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Seção de Configuração Básica */}
+          {/* Informações da Sessão Atual */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+              <Label className="text-base font-semibold text-blue-900">Sessão Atual</Label>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div>
+                <span className="text-blue-700 font-medium">Colaborador:</span>
+                <div className="text-blue-800">{session.employee.name}</div>
+              </div>
+              <div>
+                <span className="text-blue-700 font-medium">Máquina:</span>
+                <div className="text-blue-800">{session.machine.name}</div>
+              </div>
+              <div>
+                <span className="text-blue-700 font-medium">Peças Produzidas:</span>
+                <div className="text-blue-800 font-bold">{session.totalPieces}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Seção de Configuração de Retomada */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <Label className="text-lg font-semibold text-gray-900">Configuração Básica</Label>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label className="text-sm font-medium text-gray-700">Colaborador *</Label>
-                <Select
-                  value={formData.employeeId > 0 ? formData.employeeId.toString() : ""}
-                  onValueChange={(value) => setFormData({ ...formData, employeeId: parseInt(value) || 0 })}
-                >
-                  <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="Selecione um colaborador" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.id.toString()}>
-                        {employee.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
-                <Label className="text-sm font-medium text-gray-700">Máquina *</Label>
-                <Select
-                  value={formData.machineId > 0 ? formData.machineId.toString() : ""}
-                  onValueChange={(value) => setFormData({ ...formData, machineId: parseInt(value) || 0 })}
-                >
-                  <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="Selecione uma máquina" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {machines.map((machine) => (
-                      <SelectItem key={machine.id} value={machine.id.toString()}>
-                        {machine.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              <Label className="text-lg font-semibold text-gray-900">Configuração para Retomada</Label>
             </div>
             
             <div>
@@ -234,14 +229,24 @@ export default function ProductionModal({ open, onOpenChange }: ProductionModalP
                 <SelectContent>
                   {matrices.map((matrix) => (
                     <SelectItem key={matrix.id} value={matrix.id.toString()}>
-                      {matrix.code} - {matrix.name}
+                      <div className="flex items-center gap-2">
+                        {matrix.id === session.matrix.id && <Badge variant="outline" className="text-xs">Atual</Badge>}
+                        {matrix.code} - {matrix.name}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              
               {selectedMatrix && (
-                <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="text-sm text-blue-800">
+                <div className={`mt-2 p-3 rounded-lg border ${isMatrixChanged ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-200'}`}>
+                  <div className={`text-sm ${isMatrixChanged ? 'text-orange-800' : 'text-blue-800'}`}>
+                    {isMatrixChanged && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <RotateCcw className="w-4 h-4" />
+                        <span className="font-medium">Matriz será alterada</span>
+                      </div>
+                    )}
                     <strong>Peça:</strong> {selectedMatrix.pieceName} | 
                     <strong> Peças/Ciclo:</strong> {selectedMatrix.piecesPerCycle} | 
                     <strong> Tempo Padrão:</strong> {formatCycleTime(selectedMatrix.cycleTimeSeconds || 60)}
@@ -350,6 +355,20 @@ export default function ProductionModal({ open, onOpenChange }: ProductionModalP
             </div>
           )}
 
+          {/* Alertas de Mudanças */}
+          {isMatrixChanged && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <RotateCcw className="w-4 h-4 text-orange-600" />
+                <span className="text-sm font-medium text-orange-800">Mudança de Matriz Detectada</span>
+              </div>
+              <p className="text-sm text-orange-700">
+                A matriz será alterada de <strong>{session.matrix.code}</strong> para <strong>{selectedMatrix?.code}</strong>.
+                Esta alteração será registrada no histórico da produção.
+              </p>
+            </div>
+          )}
+
           {/* Botões de Ação */}
           <div className="flex space-x-3 pt-6 mt-6 border-t border-gray-200">
             <Button 
@@ -366,9 +385,9 @@ export default function ProductionModal({ open, onOpenChange }: ProductionModalP
             <Button 
               type="submit" 
               className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-              disabled={startProductionMutation.isPending}
+              disabled={resumeProductionMutation.isPending}
             >
-              {startProductionMutation.isPending ? "Iniciando..." : "🚀 Iniciar Produção"}
+              {resumeProductionMutation.isPending ? "Retomando..." : "🚀 Retomar Produção"}
             </Button>
           </div>
         </form>

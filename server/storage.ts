@@ -1,10 +1,14 @@
 import { 
   users, employees, machines, matrices, productionSessions, productionPauses, employeeMachines,
+  rawMaterials, matrixMaterials, pauseReasons,
   type User, type InsertUser, type Employee, type InsertEmployee, 
   type Machine, type InsertMachine, type Matrix, type InsertMatrix,
   type ProductionSession, type InsertProductionSession,
   type ProductionPause, type InsertProductionPause,
-  type EmployeeMachine, type InsertEmployeeMachine
+  type EmployeeMachine, type InsertEmployeeMachine,
+  type RawMaterial, type InsertRawMaterial,
+  type MatrixMaterial, type InsertMatrixMaterial,
+  type PauseReason, type InsertPauseReason
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sql } from "drizzle-orm";
@@ -40,6 +44,19 @@ export interface IStorage {
   updateMatrix(id: number, matrix: Partial<InsertMatrix>): Promise<Matrix | undefined>;
   deleteMatrix(id: number): Promise<boolean>;
 
+  // Raw Materials
+  getRawMaterials(): Promise<RawMaterial[]>;
+  getRawMaterial(id: number): Promise<RawMaterial | undefined>;
+  createRawMaterial(material: InsertRawMaterial): Promise<RawMaterial>;
+  updateRawMaterial(id: number, material: Partial<InsertRawMaterial>): Promise<RawMaterial | undefined>;
+  deleteRawMaterial(id: number): Promise<boolean>;
+
+  // Matrix Materials
+  getMatrixMaterials(matrixId: number): Promise<any[]>;
+  createMatrixMaterial(matrixMaterial: InsertMatrixMaterial): Promise<MatrixMaterial>;
+  updateMatrixMaterial(id: number, matrixMaterial: Partial<InsertMatrixMaterial>): Promise<MatrixMaterial | undefined>;
+  deleteMatrixMaterial(id: number): Promise<boolean>;
+
   // Production Sessions
   getProductionSessions(): Promise<any[]>;
   getActiveProductionSessions(): Promise<any[]>;
@@ -51,10 +68,21 @@ export interface IStorage {
   // Production Pauses
   createProductionPause(pause: InsertProductionPause): Promise<ProductionPause>;
   endProductionPause(id: number): Promise<ProductionPause | undefined>;
+  getActivePauseBySessionId(sessionId: number): Promise<ProductionPause | undefined>;
+  updateProductionPause(id: number, data: Partial<ProductionPause>): Promise<ProductionPause | undefined>;
+  getSessionPauses(sessionId: number): Promise<any[]>;
+  getSessionMetrics(sessionId: number): Promise<any>;
 
   // Employee Machines
   getEmployeeMachines(): Promise<any[]>;
   createEmployeeMachine(assignment: InsertEmployeeMachine): Promise<EmployeeMachine>;
+
+  // Pause Reasons
+  getPauseReasons(): Promise<PauseReason[]>;
+  getPauseReason(id: number): Promise<PauseReason | undefined>;
+  createPauseReason(reason: InsertPauseReason): Promise<PauseReason>;
+  updatePauseReason(id: number, reason: Partial<InsertPauseReason>): Promise<PauseReason | undefined>;
+  deletePauseReason(id: number): Promise<boolean>;
 
   // Dashboard data
   getDashboardStats(): Promise<any>;
@@ -182,8 +210,9 @@ export class DatabaseStorage implements IStorage {
         endTime: productionSessions.endTime,
         status: productionSessions.status,
         totalPieces: productionSessions.totalPieces,
-        targetPieces: productionSessions.targetPieces,
+        selectedMaterialId: productionSessions.selectedMaterialId,
         efficiency: productionSessions.efficiency,
+        notes: productionSessions.notes,
         employee: {
           id: employees.id,
           name: employees.name,
@@ -198,12 +227,28 @@ export class DatabaseStorage implements IStorage {
           id: matrices.id,
           name: matrices.name,
           code: matrices.code,
+          piecesPerCycle: matrices.piecesPerCycle,
+          cycleTimeSeconds: matrices.cycleTimeSeconds,
+        },
+        material: {
+          id: rawMaterials.id,
+          name: rawMaterials.name,
+          description: rawMaterials.description,
+        },
+        matrixMaterial: {
+          id: matrixMaterials.id,
+          cycleTimeSeconds: matrixMaterials.cycleTimeSeconds,
         },
       })
       .from(productionSessions)
       .leftJoin(employees, eq(productionSessions.employeeId, employees.id))
       .leftJoin(machines, eq(productionSessions.machineId, machines.id))
       .leftJoin(matrices, eq(productionSessions.matrixId, matrices.id))
+      .leftJoin(rawMaterials, eq(productionSessions.selectedMaterialId, rawMaterials.id))
+      .leftJoin(matrixMaterials, and(
+        eq(matrixMaterials.matrixId, matrices.id),
+        eq(matrixMaterials.rawMaterialId, rawMaterials.id)
+      ))
       .orderBy(desc(productionSessions.createdAt));
   }
 
@@ -214,7 +259,7 @@ export class DatabaseStorage implements IStorage {
         startTime: productionSessions.startTime,
         status: productionSessions.status,
         totalPieces: productionSessions.totalPieces,
-        targetPieces: productionSessions.targetPieces,
+        selectedMaterialId: productionSessions.selectedMaterialId,
         efficiency: productionSessions.efficiency,
         employee: {
           id: employees.id,
@@ -230,12 +275,28 @@ export class DatabaseStorage implements IStorage {
           id: matrices.id,
           name: matrices.name,
           code: matrices.code,
+          piecesPerCycle: matrices.piecesPerCycle,
+          cycleTimeSeconds: matrices.cycleTimeSeconds,
+        },
+        material: {
+          id: rawMaterials.id,
+          name: rawMaterials.name,
+          description: rawMaterials.description,
+        },
+        matrixMaterial: {
+          id: matrixMaterials.id,
+          cycleTimeSeconds: matrixMaterials.cycleTimeSeconds,
         },
       })
       .from(productionSessions)
       .leftJoin(employees, eq(productionSessions.employeeId, employees.id))
       .leftJoin(machines, eq(productionSessions.machineId, machines.id))
       .leftJoin(matrices, eq(productionSessions.matrixId, matrices.id))
+      .leftJoin(rawMaterials, eq(productionSessions.selectedMaterialId, rawMaterials.id))
+      .leftJoin(matrixMaterials, and(
+        eq(matrixMaterials.matrixId, matrices.id),
+        eq(matrixMaterials.rawMaterialId, rawMaterials.id)
+      ))
       .where(and(
         eq(productionSessions.status, "running"),
         sql`${productionSessions.endTime} IS NULL`
@@ -251,7 +312,7 @@ export class DatabaseStorage implements IStorage {
         endTime: productionSessions.endTime,
         status: productionSessions.status,
         totalPieces: productionSessions.totalPieces,
-        targetPieces: productionSessions.targetPieces,
+        selectedMaterialId: productionSessions.selectedMaterialId,
         efficiency: productionSessions.efficiency,
         notes: productionSessions.notes,
         employee: {
@@ -296,7 +357,7 @@ export class DatabaseStorage implements IStorage {
         endTime: new Date(),
         status: "completed",
         totalPieces,
-        efficiency: sql`CASE WHEN target_pieces > 0 THEN (${totalPieces}::float / target_pieces * 100) ELSE 0 END`,
+        efficiency: 100, // Temporary: setting efficiency to 100% since target_pieces was removed
       })
       .where(eq(productionSessions.id, id))
       .returning();
@@ -316,6 +377,149 @@ export class DatabaseStorage implements IStorage {
       .where(eq(productionPauses.id, id))
       .returning();
     return updated || undefined;
+  }
+
+  async getActivePauseBySessionId(sessionId: number): Promise<ProductionPause | undefined> {
+    const [pause] = await db
+      .select()
+      .from(productionPauses)
+      .where(and(
+        eq(productionPauses.sessionId, sessionId),
+        sql`${productionPauses.endTime} IS NULL`
+      ))
+      .orderBy(desc(productionPauses.startTime))
+      .limit(1);
+    return pause || undefined;
+  }
+
+  async updateProductionPause(id: number, data: Partial<ProductionPause>): Promise<ProductionPause | undefined> {
+    const [updated] = await db
+      .update(productionPauses)
+      .set(data)
+      .where(eq(productionPauses.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async getSessionPauses(sessionId: number): Promise<any[]> {
+    return await db
+      .select({
+        id: productionPauses.id,
+        startTime: productionPauses.startTime,
+        endTime: productionPauses.endTime,
+        reason: productionPauses.reason,
+        duration: productionPauses.duration,
+        pauseReasonId: productionPauses.pauseReasonId,
+        pauseReason: {
+          id: pauseReasons.id,
+          name: pauseReasons.name,
+          description: pauseReasons.description,
+        },
+        newMatrixId: productionPauses.newMatrixId,
+        newMaterialId: productionPauses.newMaterialId,
+        newMatrix: {
+          id: matrices.id,
+          name: matrices.name,
+        },
+        newMaterial: {
+          id: rawMaterials.id,
+          name: rawMaterials.name,
+        },
+      })
+      .from(productionPauses)
+      .leftJoin(pauseReasons, eq(productionPauses.pauseReasonId, pauseReasons.id))
+      .leftJoin(matrices, eq(productionPauses.newMatrixId, matrices.id))
+      .leftJoin(rawMaterials, eq(productionPauses.newMaterialId, rawMaterials.id))
+      .where(eq(productionPauses.sessionId, sessionId))
+      .orderBy(productionPauses.startTime);
+  }
+
+  async getSessionMetrics(sessionId: number): Promise<any> {
+    // Buscar dados da sessão
+    const [session] = await db
+      .select({
+        id: productionSessions.id,
+        startTime: productionSessions.startTime,
+        endTime: productionSessions.endTime,
+        status: productionSessions.status,
+        totalPieces: productionSessions.totalPieces,
+        matrixId: productionSessions.matrixId,
+        selectedMaterialId: productionSessions.selectedMaterialId,
+        piecesPerCycle: matrices.piecesPerCycle,
+        defaultCycleTime: matrices.cycleTimeSeconds,
+        specificCycleTime: matrixMaterials.cycleTimeSeconds,
+      })
+      .from(productionSessions)
+      .leftJoin(matrices, eq(productionSessions.matrixId, matrices.id))
+      .leftJoin(matrixMaterials, and(
+        eq(matrixMaterials.matrixId, matrices.id),
+        eq(matrixMaterials.rawMaterialId, productionSessions.selectedMaterialId)
+      ))
+      .where(eq(productionSessions.id, sessionId))
+      .limit(1);
+
+    if (!session) return null;
+
+    // Buscar pausas da sessão
+    const pauses = await db
+      .select({
+        duration: productionPauses.duration,
+        startTime: productionPauses.startTime,
+        endTime: productionPauses.endTime,
+      })
+      .from(productionPauses)
+      .where(eq(productionPauses.sessionId, sessionId));
+
+    // Calcular métricas
+    const now = new Date();
+    const startTime = new Date(session.startTime);
+    const endTime = session.endTime ? new Date(session.endTime) : now;
+    
+    // Tempo total da sessão em minutos
+    const totalSessionTime = Math.floor((endTime.getTime() - startTime.getTime()) / (1000 * 60));
+    
+    // Tempo total de pausas em minutos
+    const totalPauseTime = pauses.reduce((total, pause) => {
+      if (pause.duration) {
+        return total + pause.duration;
+      } else if (pause.endTime) {
+        const pauseDuration = Math.floor((new Date(pause.endTime).getTime() - new Date(pause.startTime).getTime()) / (1000 * 60));
+        return total + pauseDuration;
+      } else if (session.status === 'paused') {
+        // Pausa ativa
+        const pauseDuration = Math.floor((now.getTime() - new Date(pause.startTime).getTime()) / (1000 * 60));
+        return total + pauseDuration;
+      }
+      return total;
+    }, 0);
+    
+    // Tempo efetivo de trabalho
+    const effectiveWorkTime = totalSessionTime - totalPauseTime;
+    
+    // Cálculo de peças esperadas
+    const cycleTime = session.specificCycleTime || session.defaultCycleTime || 60;
+    const piecesPerCycle = session.piecesPerCycle || 1;
+    const cyclesPerHour = 3600 / cycleTime;
+    const expectedPiecesPerHour = cyclesPerHour * piecesPerCycle;
+    const expectedPieces = Math.floor((effectiveWorkTime / 60) * expectedPiecesPerHour);
+    
+    // Eficiência real
+    const actualEfficiency = expectedPieces > 0 ? (session.totalPieces / expectedPieces) * 100 : 0;
+
+    return {
+      sessionId: session.id,
+      totalSessionTime,
+      totalPauseTime,
+      effectiveWorkTime,
+      pauseCount: pauses.length,
+      cycleTime,
+      piecesPerCycle,
+      expectedPiecesPerHour: Math.round(expectedPiecesPerHour * 10) / 10,
+      expectedPieces,
+      actualPieces: session.totalPieces,
+      actualEfficiency: Math.round(actualEfficiency * 10) / 10,
+      downtimePercentage: totalSessionTime > 0 ? Math.round((totalPauseTime / totalSessionTime) * 100 * 10) / 10 : 0,
+    };
   }
 
   async getEmployeeMachines(): Promise<any[]> {
@@ -373,6 +577,103 @@ export class DatabaseStorage implements IStorage {
       runningSessions: runningSessionsResult[0]?.count || 0,
       overallEfficiency: 85, // Calculate based on actual data
     };
+  }
+
+  // Raw Materials methods
+  async getRawMaterials(): Promise<RawMaterial[]> {
+    return await db.select().from(rawMaterials).where(eq(rawMaterials.isActive, true)).orderBy(rawMaterials.name);
+  }
+
+  async getRawMaterial(id: number): Promise<RawMaterial | undefined> {
+    const [material] = await db.select().from(rawMaterials).where(eq(rawMaterials.id, id));
+    return material || undefined;
+  }
+
+  async createRawMaterial(material: InsertRawMaterial): Promise<RawMaterial> {
+    const [newMaterial] = await db.insert(rawMaterials).values(material).returning();
+    return newMaterial;
+  }
+
+  async updateRawMaterial(id: number, material: Partial<InsertRawMaterial>): Promise<RawMaterial | undefined> {
+    const [updated] = await db.update(rawMaterials).set(material).where(eq(rawMaterials.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteRawMaterial(id: number): Promise<boolean> {
+    const result = await db.update(rawMaterials).set({ isActive: false }).where(eq(rawMaterials.id, id));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // Matrix Materials methods
+  async getMatrixMaterials(matrixId: number): Promise<any[]> {
+    return await db
+      .select({
+        id: matrixMaterials.id,
+        matrixId: matrixMaterials.matrixId,
+        rawMaterialId: matrixMaterials.rawMaterialId,
+        cycleTimeSeconds: matrixMaterials.cycleTimeSeconds,
+        materialName: rawMaterials.name,
+        materialDescription: rawMaterials.description,
+      })
+      .from(matrixMaterials)
+      .innerJoin(rawMaterials, eq(matrixMaterials.rawMaterialId, rawMaterials.id))
+      .where(eq(matrixMaterials.matrixId, matrixId))
+      .orderBy(rawMaterials.name);
+  }
+
+  async createMatrixMaterial(matrixMaterial: InsertMatrixMaterial): Promise<MatrixMaterial> {
+    const [newMatrixMaterial] = await db.insert(matrixMaterials).values(matrixMaterial).returning();
+    return newMatrixMaterial;
+  }
+
+  async updateMatrixMaterial(id: number, matrixMaterial: Partial<InsertMatrixMaterial>): Promise<MatrixMaterial | undefined> {
+    const [updated] = await db.update(matrixMaterials).set(matrixMaterial).where(eq(matrixMaterials.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteMatrixMaterial(id: number): Promise<boolean> {
+    const result = await db.delete(matrixMaterials).where(eq(matrixMaterials.id, id));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // Pause Reasons CRUD
+  async getPauseReasons(): Promise<PauseReason[]> {
+    return await db
+      .select()
+      .from(pauseReasons)
+      .where(eq(pauseReasons.isActive, true))
+      .orderBy(pauseReasons.name);
+  }
+
+  async getPauseReason(id: number): Promise<PauseReason | undefined> {
+    const [reason] = await db
+      .select()
+      .from(pauseReasons)
+      .where(eq(pauseReasons.id, id));
+    return reason || undefined;
+  }
+
+  async createPauseReason(reason: InsertPauseReason): Promise<PauseReason> {
+    const [newReason] = await db.insert(pauseReasons).values(reason).returning();
+    return newReason;
+  }
+
+  async updatePauseReason(id: number, reason: Partial<InsertPauseReason>): Promise<PauseReason | undefined> {
+    const [updated] = await db
+      .update(pauseReasons)
+      .set(reason)
+      .where(eq(pauseReasons.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deletePauseReason(id: number): Promise<boolean> {
+    // Exclusão lógica - marcar como inativo
+    const result = await db
+      .update(pauseReasons)
+      .set({ isActive: false })
+      .where(eq(pauseReasons.id, id));
+    return (result.rowCount || 0) > 0;
   }
 }
 

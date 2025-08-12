@@ -1,0 +1,1 @@
+ALTER TABLE "matrices" ADD COLUMN "cycle_time_seconds" integer DEFAULT 60;

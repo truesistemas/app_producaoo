@@ -63,30 +63,14 @@ export default function ProductionCard({ session, onPause, onResume, onEnd }: Pr
             />
           </div>
 
-          {/* Production Progress */}
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          {/* Production Info */}
+          <div className="text-sm">
             <div>
-              <p className="text-gray-500 font-medium">Produzido</p>
-              <p className="text-lg font-bold text-gray-900">{session.totalPieces}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 font-medium">Meta</p>
-              <p className="text-lg font-bold text-gray-600">{session.targetPieces}</p>
+              <p className="text-gray-500 font-medium">Peças Produzidas</p>
+              <p className="text-2xl font-bold text-blue-600">{session.totalPieces}</p>
+              <p className="text-xs text-gray-500">Total de peças confeccionadas</p>
             </div>
           </div>
-
-          {/* Progress Bar */}
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ 
-                width: `${Math.min(100, (session.totalPieces / session.targetPieces) * 100)}%` 
-              }}
-            />
-          </div>
-          <p className="text-xs text-gray-500 text-center">
-            {Math.round((session.totalPieces / session.targetPieces) * 100)}% concluído
-          </p>
 
           {/* Action Buttons */}
           <div className="flex space-x-2 pt-2">

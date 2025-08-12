@@ -1,10 +1,10 @@
 Write-Host "🚀 Iniciando ProductionTracker Server..." -ForegroundColor Green
-Write-Host "📊 Database: PostgreSQL Neon" -ForegroundColor Cyan
+Write-Host "📊 Database: PostgreSQL" -ForegroundColor Cyan
 Write-Host ""
 
 # Configurar variáveis de ambiente
 $env:NODE_ENV = "development"
-$env:DATABASE_URL = "postgresql://neondb_owner:npg_qSg8tT6rAhBm@ep-icy-dream-aejlgclo-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require`&channel_binding=require"
+$env:DATABASE_URL = "postgres://app_producao:@Wsr461300321321@54.242.187.130:5432/app-producao-postegres?sslmode=disable"
 
 Write-Host "✅ Variáveis de ambiente configuradas:" -ForegroundColor Green
 Write-Host "   NODE_ENV = $env:NODE_ENV" -ForegroundColor Yellow

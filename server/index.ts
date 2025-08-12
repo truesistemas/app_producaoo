@@ -62,7 +62,7 @@ app.use((req, res, next) => {
   
   server.listen(port, host, () => {
     log(`🚀 Server running on http://${host}:${port}`);
-    log(`🗄️ Database: PostgreSQL Neon`);
+    log(`🗄️ Database: PostgreSQL Pg`);
     log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   });
 })();

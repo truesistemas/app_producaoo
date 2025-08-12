@@ -39,7 +39,6 @@ export default function ProductionTable({ sessions }: ProductionTableProps) {
               <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Matriz</th>
               <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Status</th>
               <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Produzido</th>
-              <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Meta</th>
             </tr>
           </thead>
           <tbody>
@@ -64,7 +63,6 @@ export default function ProductionTable({ sessions }: ProductionTableProps) {
                   <td className="py-4 px-4 text-gray-700">{session.matrix.code}</td>
                   <td className="py-4 px-4">{getStatusBadge(session.status)}</td>
                   <td className="py-4 px-4 font-medium text-gray-900">{session.totalPieces}</td>
-                  <td className="py-4 px-4 text-gray-500">{session.targetPieces}</td>
                 </tr>
               ))
             )}

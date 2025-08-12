@@ -131,7 +131,6 @@ export default function Reports() {
       "Fim",
       "Status",
       "Peças Produzidas",
-      "Meta",
       "Eficiência (%)"
     ];
     
@@ -147,7 +146,6 @@ export default function Reports() {
         session.status === "paused" ? "Pausada" : 
         session.status === "completed" ? "Finalizada" : session.status,
         session.totalPieces,
-        session.targetPieces,
         session.efficiency.toFixed(1)
       ].join(","))
     ].join("\n");
@@ -319,7 +317,6 @@ export default function Reports() {
                       <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Duração</th>
                       <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Status</th>
                       <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Produzido</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Meta</th>
                       <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Eficiência</th>
                     </tr>
                   </thead>
@@ -341,7 +338,6 @@ export default function Reports() {
                         </td>
                         <td className="py-3 px-4">{getStatusBadge(session.status)}</td>
                         <td className="py-3 px-4 font-medium text-gray-900">{session.totalPieces}</td>
-                        <td className="py-3 px-4 text-gray-500">{session.targetPieces}</td>
                         <td className="py-3 px-4">
                           <span className={`font-medium ${
                             session.efficiency >= 100 ? "text-success-600" :

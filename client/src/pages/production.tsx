@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Play, Pause, Square } from "lucide-react";
+import { Play, Pause, Square, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -15,38 +15,53 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import ProductionModal from "@/components/modals/production-modal";
+import ResumeProductionModal from "@/components/modals/resume-production-modal";
 import ProductionCard from "@/components/production/production-card";
+import SessionDetailsModal from "@/components/production/session-details-modal";
 import RealTimeDuration from "@/components/ui/real-time-duration";
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { ProductionSessionWithDetails } from "@/types";
+import type { ProductionSessionWithDetails, PauseReason } from "@/types";
 
 export default function Production() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [productionModalOpen, setProductionModalOpen] = useState(false);
   const [pauseModalOpen, setPauseModalOpen] = useState(false);
+  const [resumeModalOpen, setResumeModalOpen] = useState(false);
   const [endModalOpen, setEndModalOpen] = useState(false);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedSession, setSelectedSession] = useState<ProductionSessionWithDetails | null>(null);
   const [pauseReason, setPauseReason] = useState("");
+  const [selectedPauseReasonId, setSelectedPauseReasonId] = useState<number | null>(null);
   const [finalPieces, setFinalPieces] = useState(0);
 
   const { data: sessions = [], isLoading } = useQuery<ProductionSessionWithDetails[]>({
     queryKey: ["/api/production-sessions"],
-    refetchInterval: 30000,
+    refetchInterval: 5000, // Atualizar mais frequentemente para contexto em tempo real
+  });
+
+  const { data: pauseReasons = [] } = useQuery<PauseReason[]>({
+    queryKey: ["/api/pause-reasons"],
   });
 
   const pauseSessionMutation = useMutation({
-    mutationFn: async ({ id, reason }: { id: number; reason: string }) => {
-      return await apiRequest("PUT", `/api/production-sessions/${id}/pause`, { reason });
+    mutationFn: async ({ id, pauseReasonId, reason }: { id: number; pauseReasonId?: number; reason?: string }) => {
+      return await apiRequest("PUT", `/api/production-sessions/${id}/pause`, { pauseReasonId, reason });
     },
     onSuccess: () => {
       toast({
         title: "Produção Pausada",
         description: "A sessão foi pausada com sucesso.",
       });
+      // Invalidar múltiplas queries para atualização completa
       queryClient.invalidateQueries({ queryKey: ["/api/production-sessions"] });
+      if (selectedSession) {
+        queryClient.invalidateQueries({ queryKey: [`/api/production-sessions/${selectedSession.id}/pauses`] });
+        queryClient.invalidateQueries({ queryKey: [`/api/production-sessions/${selectedSession.id}/metrics`] });
+      }
       setPauseModalOpen(false);
       setPauseReason("");
+      setSelectedPauseReasonId(null);
     },
     onError: () => {
       toast({
@@ -57,25 +72,7 @@ export default function Production() {
     },
   });
 
-  const resumeSessionMutation = useMutation({
-    mutationFn: async (id: number) => {
-      return await apiRequest("PUT", `/api/production-sessions/${id}/resume`);
-    },
-    onSuccess: () => {
-      toast({
-        title: "Produção Retomada",
-        description: "A sessão foi retomada com sucesso.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/production-sessions"] });
-    },
-    onError: () => {
-      toast({
-        title: "Erro",
-        description: "Erro ao retomar produção.",
-        variant: "destructive",
-      });
-    },
-  });
+
 
   const endSessionMutation = useMutation({
     mutationFn: async ({ id, totalPieces }: { id: number; totalPieces: number }) => {
@@ -86,7 +83,12 @@ export default function Production() {
         title: "Produção Finalizada",
         description: "A sessão foi finalizada com sucesso.",
       });
+      // Invalidar múltiplas queries para atualização completa
       queryClient.invalidateQueries({ queryKey: ["/api/production-sessions"] });
+      if (selectedSession) {
+        queryClient.invalidateQueries({ queryKey: [`/api/production-sessions/${selectedSession.id}/pauses`] });
+        queryClient.invalidateQueries({ queryKey: [`/api/production-sessions/${selectedSession.id}/metrics`] });
+      }
       setEndModalOpen(false);
       setFinalPieces(0);
     },
@@ -105,7 +107,8 @@ export default function Production() {
   };
 
   const handleResume = (session: ProductionSessionWithDetails) => {
-    resumeSessionMutation.mutate(session.id);
+    setSelectedSession(session);
+    setResumeModalOpen(true);
   };
 
   const handleEnd = (session: ProductionSessionWithDetails) => {
@@ -113,6 +116,21 @@ export default function Production() {
     setFinalPieces(session.totalPieces);
     setEndModalOpen(true);
   };
+
+  const handleShowDetails = (session: ProductionSessionWithDetails) => {
+    setSelectedSession(session);
+    setDetailsModalOpen(true);
+  };
+
+  // Atualizar selectedSession quando os dados mudarem para manter contexto atualizado
+  useEffect(() => {
+    if (selectedSession && sessions.length > 0) {
+      const updatedSession = sessions.find(s => s.id === selectedSession.id);
+      if (updatedSession) {
+        setSelectedSession(updatedSession);
+      }
+    }
+  }, [sessions, selectedSession]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -179,10 +197,10 @@ export default function Production() {
                     <th className="text-left py-4 px-6 font-medium text-gray-500">Colaborador</th>
                     <th className="text-left py-4 px-6 font-medium text-gray-500">Máquina</th>
                     <th className="text-left py-4 px-6 font-medium text-gray-500">Matriz</th>
+                    <th className="text-left py-4 px-6 font-medium text-gray-500">Material</th>
                     <th className="text-left py-4 px-6 font-medium text-gray-500">Status</th>
                     <th className="text-left py-4 px-6 font-medium text-gray-500">Duração</th>
                     <th className="text-left py-4 px-6 font-medium text-gray-500">Produzido</th>
-                    <th className="text-left py-4 px-6 font-medium text-gray-500">Meta</th>
                     <th className="text-left py-4 px-6 font-medium text-gray-500">Ações</th>
                   </tr>
                 </thead>
@@ -196,7 +214,22 @@ export default function Production() {
                         {session.machine.name}
                       </td>
                       <td className="py-4 px-6 text-gray-700">
-                        {session.matrix.code}
+                        <div>
+                          <div className="font-medium">{session.matrix.name}</div>
+                          <div className="text-sm text-gray-500">{session.matrix.code}</div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-gray-700">
+                        {session.material ? (
+                          <div>
+                            <div className="font-medium">{session.material.name}</div>
+                            {session.material.description && (
+                              <div className="text-sm text-gray-500">{session.material.description}</div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 italic">Não selecionado</span>
+                        )}
                       </td>
                       <td className="py-4 px-6">
                         {getStatusBadge(session.status)}
@@ -211,17 +244,24 @@ export default function Production() {
                       <td className="py-4 px-6 font-medium text-gray-900">
                         {session.totalPieces}
                       </td>
-                      <td className="py-4 px-6 text-gray-500">
-                        {session.targetPieces}
-                      </td>
+
                       <td className="py-4 px-6">
                         <div className="flex space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleShowDetails(session)}
+                            title="Ver detalhes"
+                          >
+                            <Info className="w-4 h-4" />
+                          </Button>
                           {session.status === "running" && (
                             <>
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handlePause(session)}
+                                title="Pausar produção"
                               >
                                 <Pause className="w-4 h-4" />
                               </Button>
@@ -229,6 +269,7 @@ export default function Production() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleEnd(session)}
+                                title="Finalizar produção"
                               >
                                 <Square className="w-4 h-4" />
                               </Button>
@@ -239,6 +280,7 @@ export default function Production() {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleResume(session)}
+                              title="Retomar produção"
                             >
                               <Play className="w-4 h-4" />
                             </Button>
@@ -259,6 +301,12 @@ export default function Production() {
         onOpenChange={setProductionModalOpen}
       />
 
+      <ResumeProductionModal
+        open={resumeModalOpen}
+        onOpenChange={setResumeModalOpen}
+        session={selectedSession}
+      />
+
       {/* Pause Modal */}
       <Dialog open={pauseModalOpen} onOpenChange={setPauseModalOpen}>
         <DialogContent>
@@ -270,18 +318,52 @@ export default function Production() {
             onSubmit={(e) => {
               e.preventDefault();
               if (selectedSession) {
-                pauseSessionMutation.mutate({ id: selectedSession.id, reason: pauseReason });
+                if (!selectedPauseReasonId) {
+                  toast({
+                    title: "Erro",
+                    description: "Selecione um motivo para a pausa.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                pauseSessionMutation.mutate({ 
+                  id: selectedSession.id, 
+                  pauseReasonId: selectedPauseReasonId,
+                  reason: pauseReason.trim() || undefined 
+                });
               }
             }}
             className="space-y-4"
           >
             <div>
               <Label>Motivo da Pausa *</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                {pauseReasons.map((reason) => (
+                  <div
+                    key={reason.id}
+                    onClick={() => setSelectedPauseReasonId(reason.id)}
+                    className={`p-3 border-2 rounded-lg cursor-pointer transition-all hover:shadow-md ${
+                      selectedPauseReasonId === reason.id
+                        ? 'border-primary bg-primary/5 shadow-md'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="font-medium text-sm">{reason.name}</div>
+                    {reason.description && (
+                      <div className="text-xs text-gray-500 mt-1">{reason.description}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <Label>Observações (opcional)</Label>
               <Textarea
                 value={pauseReason}
                 onChange={(e) => setPauseReason(e.target.value)}
-                placeholder="Ex: Manutenção, troca de matriz, descanso..."
-                required
+                placeholder="Informações adicionais sobre a pausa..."
+                rows={2}
               />
             </div>
             
@@ -335,6 +417,12 @@ export default function Production() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <SessionDetailsModal
+        session={selectedSession}
+        open={detailsModalOpen}
+        onOpenChange={setDetailsModalOpen}
+      />
     </>
   );
 }

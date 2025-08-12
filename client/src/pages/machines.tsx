@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -33,6 +34,7 @@ export default function Machines() {
     maxCapacityPerDay: 0,
     status: "inactive",
     isAvailable: true,
+    observations: "",
   });
 
   const { data: machines = [], isLoading } = useQuery<Machine[]>({
@@ -90,6 +92,7 @@ export default function Machines() {
       maxCapacityPerDay: 0,
       status: "inactive",
       isAvailable: true,
+      observations: "",
     });
     setEditingMachine(null);
   };
@@ -112,6 +115,7 @@ export default function Machines() {
       maxCapacityPerDay: machine.maxCapacityPerDay || 0,
       status: machine.status,
       isAvailable: machine.isAvailable,
+      observations: machine.observations || "",
     });
     setModalOpen(true);
   };
@@ -197,6 +201,16 @@ export default function Machines() {
                       <SelectItem value="maintenance">Manutenção</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                
+                <div>
+                  <Label>Observações</Label>
+                  <Textarea
+                    value={formData.observations || ''}
+                    onChange={(e) => setFormData({ ...formData, observations: e.target.value })}
+                    placeholder="Digite observações sobre a máquina (opcional)"
+                    rows={3}
+                  />
                 </div>
                 
                 <div className="flex space-x-3 pt-4">

@@ -10,8 +10,10 @@ import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import Employees from "@/pages/employees";
 import Machines from "@/pages/machines";
+import RawMaterials from "@/pages/raw-materials";
 import Matrices from "@/pages/matrices";
 import Production from "@/pages/production";
+import PauseReasons from "@/pages/pause-reasons";
 import Reports from "@/pages/reports";
 import UsersPage from "@/pages/users";
 import Sidebar from "@/components/layout/sidebar";
@@ -42,6 +44,12 @@ function Router() {
         </RequireAuth>
       </Route>
       
+      <Route path="/materia-prima">
+        <RequireAuth>
+          <RawMaterials />
+        </RequireAuth>
+      </Route>
+      
       <Route path="/matrizes">
         <RequireAuth>
           <Matrices />
@@ -51,6 +59,14 @@ function Router() {
       <Route path="/producao">
         <RequireAuth>
           <Production />
+        </RequireAuth>
+      </Route>
+      
+      <Route path="/motivos-pausa">
+        <RequireAuth>
+          <RequireMinimumRole role="supervisor">
+            <PauseReasons />
+          </RequireMinimumRole>
         </RequireAuth>
       </Route>
       

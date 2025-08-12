@@ -24,7 +24,7 @@ The application follows a modern full-stack architecture with clear separation b
 - **Runtime**: Node.js with Express.js framework
 - **Language**: TypeScript with ES modules
 - **Database ORM**: Drizzle ORM for type-safe database operations
-- **Database**: PostgreSQL (configured for Neon serverless)
+- **Database**: PostgreSQL Pg
 - **API Design**: RESTful endpoints with structured error handling
 
 ### Deployment Strategy
@@ -73,7 +73,6 @@ The system uses PostgreSQL with the following main entities:
 ## External Dependencies
 
 ### Core Dependencies
-- **@neondatabase/serverless**: PostgreSQL connection for serverless environments
 - **drizzle-orm**: Type-safe database ORM with PostgreSQL dialect
 - **@tanstack/react-query**: Server state management and caching
 - **@radix-ui/***: Accessible UI component primitives
@@ -94,7 +93,7 @@ The system uses PostgreSQL with the following main entities:
 
 ### Development Environment
 - **Hot Reloading**: Vite dev server with React Fast Refresh
-- **Database**: Neon PostgreSQL with environment variable configuration
+- **Database**: PostgreSQL Pg
 - **Build Watching**: Automatic TypeScript compilation checking
 
 ### Production Build

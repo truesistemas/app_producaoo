@@ -4,14 +4,14 @@ echo.
 echo ============================================
 echo    ProductionTracker - Windows Startup
 echo ============================================
-echo Database: PostgreSQL Neon
+echo Database: PostgreSQL
 echo Port: 5002
 echo Host: localhost
 echo.
 
 echo [1/3] Configurando variaveis de ambiente...
 set NODE_ENV=development
-set "DATABASE_URL=postgresql://neondb_owner:npg_qSg8tT6rAhBm@ep-icy-dream-aejlgclo-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+set "DATABASE_URL=postgres://app_producao:@Wsr461300321321@54.242.187.130:5432/app-producao-postegres?sslmode=disable"
 echo ✓ NODE_ENV = %NODE_ENV%
 echo ✓ DATABASE_URL = [CONFIGURADO]
 echo.

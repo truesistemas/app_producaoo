@@ -9,7 +9,9 @@ import {
   Factory,
   LogOut,
   User,
-  Shield
+  Shield,
+  Package2,
+  PauseCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/auth-context";
@@ -29,8 +31,10 @@ const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Colaboradores", href: "/colaboradores", icon: Users },
   { name: "Máquinas", href: "/maquinas", icon: Settings },
+  { name: "Matéria Prima", href: "/materia-prima", icon: Package2 },
   { name: "Matrizes", href: "/matrizes", icon: Package },
   { name: "Produção", href: "/producao", icon: Play },
+  { name: "Motivos de Pausa", href: "/motivos-pausa", icon: PauseCircle, supervisorOnly: true },
   { name: "Relatórios", href: "/relatorios", icon: BarChart3 },
   { name: "Usuários", href: "/usuarios", icon: Shield, adminOnly: true },
 ];
@@ -77,7 +81,11 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-2">
         {navigation
-          .filter((item) => !item.adminOnly || user?.role === 'admin')
+          .filter((item) => {
+            if (item.adminOnly && user?.role !== 'admin') return false;
+            if (item.supervisorOnly && !hasRole('supervisor')) return false;
+            return true;
+          })
           .map((item) => {
             const isActive = location === item.href;
             const showPendingBadge = item.name === "Usuários" && hasRole('admin') && pendingCount > 0;

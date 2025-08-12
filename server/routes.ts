@@ -4,7 +4,9 @@ import { storage } from "./storage";
 import { 
   insertEmployeeSchema, insertMachineSchema, insertMatrixSchema, 
   insertProductionSessionSchema, insertProductionPauseSchema,
-  insertEmployeeMachineSchema, insertUserSchema
+  insertEmployeeMachineSchema, insertUserSchema,
+  insertRawMaterialSchema, insertMatrixMaterialSchema,
+  insertPauseReasonSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { 
@@ -434,7 +436,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/machines/:id", async (req, res) => {
+  app.put("/api/machines/:id", authenticateToken, requireMinimumRole("supervisor"), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const machineData = insertMachineSchema.partial().parse(req.body);
@@ -492,7 +494,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Production session routes (require authentication)
-  app.get("/api/production-sessions", authenticateToken, async (req, res) => {
+  app.get("/api/production-sessions", async (req, res) => {
     try {
       const sessions = await storage.getProductionSessions();
       res.json(sessions);
@@ -501,7 +503,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/production-sessions/active", authenticateToken, async (req, res) => {
+  app.get("/api/production-sessions/active", async (req, res) => {
     try {
       const sessions = await storage.getActiveProductionSessions();
       res.json(sessions);
@@ -530,7 +532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/production-sessions/:id/pause", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { reason } = req.body;
+      const { pauseReasonId, reason } = req.body;
       
       // Update session status to paused
       await storage.updateProductionSession(id, { status: "paused" });
@@ -538,8 +540,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create pause record
       const pause = await storage.createProductionPause({
         sessionId: id,
+        pauseReasonId: pauseReasonId || null,
         startTime: new Date(),
-        reason,
+        reason: reason || null,
       });
       
       res.json({ message: "Produção pausada", pause });
@@ -551,12 +554,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/production-sessions/:id/resume", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
+      const { matrixId, selectedMaterialId } = req.body;
       
-      // Update session status to running
-      const session = await storage.updateProductionSession(id, { status: "running" });
+      // Find active pause (without endTime) and close it
+      const activePause = await storage.getActivePauseBySessionId(id);
+      if (activePause) {
+        const endTime = new Date();
+        const durationMinutes = Math.round((endTime.getTime() - new Date(activePause.startTime).getTime()) / (1000 * 60));
+        
+        await storage.updateProductionPause(activePause.id, {
+          endTime,
+          duration: durationMinutes,
+          newMatrixId: matrixId || null,
+          newMaterialId: selectedMaterialId || null
+        });
+      }
       
-      res.json({ message: "Produção retomada", session });
+      // Update session with new matrix/material if provided
+      const updateData: any = { status: "running" };
+      if (matrixId) {
+        updateData.matrixId = matrixId;
+      }
+      if (selectedMaterialId) {
+        updateData.selectedMaterialId = selectedMaterialId;
+      }
+      
+      const session = await storage.updateProductionSession(id, updateData);
+      
+      res.json({ 
+        message: "Produção retomada", 
+        session,
+        matrixChanged: !!matrixId,
+        materialChanged: !!selectedMaterialId
+      });
     } catch (error) {
+      console.error("Erro ao retomar produção:", error);
       res.status(500).json({ message: "Erro ao retomar produção" });
     }
   });
@@ -587,6 +619,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Production session pauses and metrics
+  app.get("/api/production-sessions/:id/pauses", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const pauses = await storage.getSessionPauses(id);
+      res.json(pauses);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar pausas da sessão" });
+    }
+  });
+
+  app.get("/api/production-sessions/:id/metrics", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const metrics = await storage.getSessionMetrics(id);
+      if (!metrics) {
+        return res.status(404).json({ message: "Sessão não encontrada" });
+      }
+      res.json(metrics);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao calcular métricas da sessão" });
+    }
+  });
+
   // Employee-machine assignments
   app.get("/api/employee-machines", async (req, res) => {
     try {
@@ -607,6 +663,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
       }
       res.status(500).json({ message: "Erro ao criar atribuição" });
+    }
+  });
+
+  // Raw Materials routes
+  app.get("/api/raw-materials", authenticateToken, async (req, res) => {
+    try {
+      const rawMaterials = await storage.getRawMaterials();
+      res.json(rawMaterials);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar matérias primas" });
+    }
+  });
+
+  app.post("/api/raw-materials", authenticateToken, requireMinimumRole("supervisor"), async (req, res) => {
+    try {
+      const materialData = insertRawMaterialSchema.parse(req.body);
+      const material = await storage.createRawMaterial(materialData);
+      res.status(201).json(material);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: "Erro ao criar matéria prima" });
+    }
+  });
+
+  app.put("/api/raw-materials/:id", authenticateToken, requireMinimumRole("supervisor"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const materialData = insertRawMaterialSchema.partial().parse(req.body);
+      const material = await storage.updateRawMaterial(id, materialData);
+      if (!material) {
+        return res.status(404).json({ message: "Matéria prima não encontrada" });
+      }
+      res.json(material);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: "Erro ao atualizar matéria prima" });
+    }
+  });
+
+  app.delete("/api/raw-materials/:id", authenticateToken, requireMinimumRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteRawMaterial(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Matéria prima não encontrada" });
+      }
+      res.json({ message: "Matéria prima removida com sucesso" });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao remover matéria prima" });
+    }
+  });
+
+  // Matrix Materials routes
+  app.get("/api/matrices/:id/materials", authenticateToken, async (req, res) => {
+    try {
+      const matrixId = parseInt(req.params.id);
+      const materials = await storage.getMatrixMaterials(matrixId);
+      res.json(materials);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar materiais da matriz" });
+    }
+  });
+
+  app.post("/api/matrix-materials", authenticateToken, requireMinimumRole("supervisor"), async (req, res) => {
+    try {
+      const matrixMaterialData = insertMatrixMaterialSchema.parse(req.body);
+      const matrixMaterial = await storage.createMatrixMaterial(matrixMaterialData);
+      res.status(201).json(matrixMaterial);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: "Erro ao adicionar material à matriz" });
+    }
+  });
+
+  app.delete("/api/matrix-materials/:id", authenticateToken, requireMinimumRole("supervisor"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteMatrixMaterial(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Material da matriz não encontrado" });
+      }
+      res.json({ message: "Material removido da matriz com sucesso" });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao remover material da matriz" });
+    }
+  });
+
+  // Pause Reasons routes
+  app.get("/api/pause-reasons", async (req, res) => {
+    try {
+      const reasons = await storage.getPauseReasons();
+      res.json(reasons);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar motivos de pausa" });
+    }
+  });
+
+  app.get("/api/pause-reasons/:id", authenticateToken, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const reason = await storage.getPauseReason(id);
+      if (!reason) {
+        return res.status(404).json({ message: "Motivo de pausa não encontrado" });
+      }
+      res.json(reason);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar motivo de pausa" });
+    }
+  });
+
+  app.post("/api/pause-reasons", authenticateToken, requireMinimumRole("supervisor"), async (req, res) => {
+    try {
+      const reasonData = insertPauseReasonSchema.parse(req.body);
+      const reason = await storage.createPauseReason(reasonData);
+      res.status(201).json(reason);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: "Erro ao criar motivo de pausa" });
+    }
+  });
+
+  app.put("/api/pause-reasons/:id", authenticateToken, requireMinimumRole("supervisor"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const reasonData = insertPauseReasonSchema.partial().parse(req.body);
+      const reason = await storage.updatePauseReason(id, reasonData);
+      if (!reason) {
+        return res.status(404).json({ message: "Motivo de pausa não encontrado" });
+      }
+      res.json(reason);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: "Erro ao atualizar motivo de pausa" });
+    }
+  });
+
+  app.delete("/api/pause-reasons/:id", authenticateToken, requireMinimumRole("supervisor"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deletePauseReason(id);
+      if (!success) {
+        return res.status(404).json({ message: "Motivo de pausa não encontrado" });
+      }
+      res.json({ message: "Motivo de pausa removido com sucesso" });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao remover motivo de pausa" });
     }
   });
 
